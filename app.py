@@ -85,6 +85,10 @@ def traduzir_arquivo():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/teste', methods=['GET'])
+def testar():
+    return jsonify({"message": "Transcrição realizada com sucesso"}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)
