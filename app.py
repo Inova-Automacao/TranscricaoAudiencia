@@ -22,7 +22,7 @@ with app.app_context():
 
 # Rota para upload e transcrição
 @app.route('/upload', methods=['POST'])
-def upload_transcrever():
+def upload():
     # Verifica se a parte 'file' está na requisição
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
