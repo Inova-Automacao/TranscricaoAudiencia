@@ -1,27 +1,28 @@
 from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
 import whisper
-import os
+import tempfile
 
 app = Flask(__name__)
 
-# Pasta onde os arquivos de áudio serão armazenados
-AUDIOS = 'uploads'
-os.makedirs(AUDIOS, exist_ok=True) 
-app.config['AUDIOS'] = AUDIOS
+# Configuração do banco de dados PostgreSQL
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:hbZbvyApKVUTDWtpoNUMRxNQOrjjPRJO@monorail.proxy.rlwy.net:27291/railway'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Pasta onde os arquivos de texto transcritos serão armazenados
-TEXTO = 'transcricao'
-os.makedirs(TEXTO, exist_ok=True) 
-app.config['TEXTO'] = TEXTO
+db = SQLAlchemy(app)
 
-# Extensões permitidas
-EXTENSOES_PERMITIDAS = {'wav', 'mp3', 'm4a', 'flac'}
+# Definição do modelo
+class Transcription(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    text = db.Column(db.Text, nullable=False)
 
-def verifica_arq(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in EXTENSOES_PERMITIDAS
+# Criação das tabelas
+with app.app_context():
+    db.create_all()
 
+# Rota para upload e transcrição
 @app.route('/upload', methods=['POST'])
-def upload_file():
+def upload_transcrever():
     # Verifica se a parte 'file' está na requisição
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
@@ -32,63 +33,56 @@ def upload_file():
     if file.filename == '':
         return jsonify({"error": "Nenhum arquivo selecionado"}), 400
 
-    if file and verifica_arq(file.filename):
-        filename = file.filename
-        filepath = os.path.join(app.config['AUDIOS'], filename)
-        file.save(filepath)
-
-        return jsonify({"message": "Arquivo salvo com sucesso", "filename": filename}), 200
-
-    return jsonify({"error": "Tipo de arquivo nao suportado"}), 400
-
-@app.route('/transcrever', methods=['POST'])
-def traduzir_arquivo():
-    # Recebe o nome do arquivo previamente carregado
-    data = request.get_json()
-    filename = data.get('filename')
-
-    if not filename:
-        return jsonify({"error": "Nome do arquivo não fornecido"}), 400
-
-    # Caminho completo para o arquivo de áudio
-    filepath = os.path.join(app.config['AUDIOS'], filename)
-
-    # Carrega o modelo Whisper
-    model = whisper.load_model("medium")
-
     try:
-        # Carrega o áudio
-        audio = whisper.load_audio(filepath)
-        audio = whisper.pad_or_trim(audio)
+        # Salva o arquivo em um diretório temporário
+        temp_audio_path = save_temporary_file(file)
 
-        # Cria o log-Mel spectrogram e move para o mesmo dispositivo que o modelo
-        mel = whisper.log_mel_spectrogram(audio).to(model.device)
+        # Carrega o modelo Whisper
+        model = whisper.load_model("base")
 
-        # Define as opções de decodificação com o idioma português
-        decode_options = whisper.DecodingOptions(language='pt')
-        
         # Realiza a transcrição
-        result = model.decode(mel, decode_options)
-        transcription_text = result.text
+        result = model.transcribe(temp_audio_path, language='pt')
+        transcription_text = result['text']
 
-        # Caminho completo para salvar a transcrição
-        transcription_filename = f"{os.path.splitext(filename)[0]}.txt"
-        transcription_filepath = os.path.join(app.config['TEXTO'], transcription_filename)
+        # Salva a transcrição no banco de dados
+        transcription = Transcription(text=transcription_text)
+        db.session.add(transcription)
+        db.session.commit()
 
-        # Salve a transcrição em um arquivo de texto
-        with open(transcription_filepath, 'w', encoding='utf-8') as f:
-            f.write(transcription_text)
-
-        # Retorne o caminho do arquivo de transcrição como resposta JSON
-        return jsonify({"message": "Transcrição realizada com sucesso", "transcription_file": transcription_filepath}), 200
-
+        return jsonify({"message": "Transcrição realizada com sucesso", "transcription": transcription_text}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
-@app.route('/teste', methods=['GET'])
-def testar():
-    return jsonify({"message": "Transcrição realizada com sucesso"}), 200
+
+def save_temporary_file(file):
+    # Cria um arquivo temporário para salvar o conteúdo do arquivo enviado
+    temp_audio = tempfile.NamedTemporaryFile(delete=False)
+
+    # Salva os dados do arquivo na versão temporária
+    file.save(temp_audio)
+    temp_audio.close()
+
+    # Retorna o caminho do arquivo temporário
+    return temp_audio.name
+
+# Rota GET para obter uma transcrição pelo ID
+@app.route('/transcricao/<int:transcription_id>', methods=['GET'])
+def get_transcription(transcription_id):
+    transcription = Transcription.query.get(transcription_id)
+
+    if not transcription:
+        return jsonify({"error": "Transcrição não encontrada"}), 404
+
+    return jsonify({
+        "id": transcription.id,
+        "text": transcription.text
+    }), 200
+
+# Rota GET para obter todos os IDs de transcrições
+@app.route('/transcricoes', methods=['GET'])
+def get_all_transcription_ids():
+    transcription_ids = [transcription.id for transcription in Transcription.query.all()]
+    return jsonify({"transcription_ids": transcription_ids}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)
