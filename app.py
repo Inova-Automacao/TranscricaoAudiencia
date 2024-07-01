@@ -6,7 +6,7 @@ import tempfile
 app = Flask(__name__)
 
 # Configuração do banco de dados PostgreSQL
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:hbZbvyApKVUTDWtpoNUMRxNQOrjjPRJO@monorail.proxy.rlwy.net:27291/railway'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:eZaheKwKIeHknKAqDJqCfmQiCWKCLNAF@monorail.proxy.rlwy.net:55261/railway'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
