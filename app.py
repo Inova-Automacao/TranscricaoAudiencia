@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from pytube import YouTube
 import whisper
 import tempfile
 
@@ -83,6 +84,51 @@ def get_transcription(transcription_id):
 def get_all_transcription_ids():
     transcription_ids = [transcription.id for transcription in Transcription.query.all()]
     return jsonify({"transcription_ids": transcription_ids}), 200
+
+def download_audio(youtube_url):
+    yt = YouTube(youtube_url)
+    stream = yt.streams.filter(only_audio=True).first()
+    temp_audio = tempfile.NamedTemporaryFile(delete=False)
+    stream.stream_to_buffer(temp_audio)
+    temp_audio.close()
+    return temp_audio.name
+
+def download_audio(youtube_url):
+    yt = YouTube(youtube_url)
+    stream = yt.streams.filter(only_audio=True).first()
+    temp_audio = tempfile.NamedTemporaryFile(delete=False)
+    stream.stream_to_buffer(temp_audio)
+    temp_audio.close()
+    return temp_audio.name
+
+# Rota POST para enviar link do youtube
+@app.route('/uploadlink', methods=['POST'])
+def upload_link():
+    url_yt = request.form.get('url_yt')
+
+    try:
+        # Salva o arquivo em um diretório temporário
+        temp_audio_path = download_audio(url_yt)
+
+        # Carrega o modelo Whisper
+        model = whisper.load_model("base")
+
+        # Realiza a transcrição
+        result = model.transcribe(temp_audio_path, language='pt')
+        transcription_text = result['text']
+
+        # Salva a transcrição no banco de dados
+        transcription = Transcription(text=transcription_text)
+        db.session.add(transcription)
+        db.session.commit()
+
+        # Remove o arquivo de áudio temporário (opcional)
+        # O arquivo será deletado automaticamente ao fechar o NamedTemporaryFile
+
+        return jsonify({"message": "Transcrição realizada com sucesso", "transcription": transcription_text}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
