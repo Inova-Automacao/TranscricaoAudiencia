@@ -93,14 +93,6 @@ def download_audio(youtube_url):
     temp_audio.close()
     return temp_audio.name
 
-def download_audio(youtube_url):
-    yt = YouTube(youtube_url)
-    stream = yt.streams.filter(only_audio=True).first()
-    temp_audio = tempfile.NamedTemporaryFile(delete=False)
-    stream.stream_to_buffer(temp_audio)
-    temp_audio.close()
-    return temp_audio.name
-
 # Rota POST para enviar link do youtube
 @app.route('/uploadlink', methods=['POST'])
 def upload_link():
