@@ -3,6 +3,12 @@ from flask_sqlalchemy import SQLAlchemy
 from pytube import YouTube
 import whisper
 import tempfile
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+API_KEY = os.getenv('API_KEY')
 
 app = Flask(__name__)
 
@@ -21,9 +27,18 @@ class Transcription(db.Model):
 with app.app_context():
     db.create_all()
 
+def verify_api_key():
+    api_key = request.headers.get('X-API-KEY')
+    if api_key != API_KEY:
+        return jsonify({'error': 'Unauthorized'}), 403
+
 # Rota para upload e transcrição
 @app.route('/upload', methods=['POST'])
 def upload():
+    auth_error = verify_api_key()
+
+    if auth_error:
+        return auth_error
     # Verifica se a parte 'file' está na requisição
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
@@ -69,6 +84,11 @@ def save_temporary_file(file):
 # Rota GET para obter uma transcrição pelo ID
 @app.route('/transcricao/<int:transcription_id>', methods=['GET'])
 def get_transcription(transcription_id):
+
+    auth_error = verify_api_key()
+
+    if auth_error:
+        return auth_error
     transcription = Transcription.query.get(transcription_id)
 
     if not transcription:
@@ -81,7 +101,7 @@ def get_transcription(transcription_id):
 
 # Rota GET para obter todos os IDs de transcrições
 @app.route('/transcricoes', methods=['GET'])
-def get_all_transcription_ids():
+def get_all_transcription_ids():     
     transcription_ids = [transcription.id for transcription in Transcription.query.all()]
     return jsonify({"transcription_ids": transcription_ids}), 200
 
@@ -96,6 +116,11 @@ def download_audio(youtube_url):
 # Rota POST para enviar link do youtube
 @app.route('/uploadlink', methods=['POST'])
 def upload_link():
+
+    auth_error = verify_api_key()
+
+    if auth_error:
+        return auth_error
     url_yt = request.form.get('url_yt')
 
     try:
